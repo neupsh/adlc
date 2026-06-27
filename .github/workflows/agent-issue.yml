@@ -19,21 +19,6 @@ on:
         required: false
         type: string
         default: ""
-      build_test_cmd:
-        description: Command to run tests
-        required: false
-        type: string
-        default: ""
-      project_conventions:
-        description: Project-specific conventions
-        required: false
-        type: string
-        default: ""
-      agent_email:
-        description: Email identity for agent git commits
-        required: false
-        type: string
-        default: "agent-coder@agents.bot"
 
 jobs:
   run-agent:
@@ -45,9 +30,7 @@ jobs:
       pull-requests: write
     env:
       ISSUE_NUMBER: ${{ inputs.issue_number }}
-      ISSUE_TITLE: ${{ inputs.issue_title }}
       BRANCH: agent/issue-${{ inputs.issue_number }}
-      WORKTREE: /tmp/agent-worktrees/${{ inputs.issue_number }}
       REPO: ${{ github.repository }}
     steps:
-      - run: echo "Issue ${{ inputs.issue_number }} - ${{ inputs.issue_title }}"
+      - run: echo "Issue ${{ inputs.issue_number }}"
