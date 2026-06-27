@@ -37,6 +37,11 @@ on:
         required: false
         type: string
         default: "agent-coder@agents.bot"
+      model:
+        description: Claude model for the coding agent (e.g. claude-sonnet-4-6, claude-opus-4-8)
+        required: false
+        type: string
+        default: "claude-sonnet-4-6"
 
 jobs:
   run-agent:
@@ -52,6 +57,7 @@ jobs:
       BRANCH: agent/issue-${{ inputs.issue_number }}
       WORKTREE: /tmp/agent-worktrees/${{ inputs.issue_number }}
       REPO: ${{ github.repository }}
+      MODEL: ${{ inputs.model }}
 
     steps:
       - name: Checkout caller repo
@@ -108,7 +114,7 @@ jobs:
             --add-label "agent-coding" \
             --repo "$REPO"
           gh issue comment "$ISSUE_NUMBER" \
-            --body "Agent Coder started on $BRANCH -- $(date -u '+%Y-%m-%d %H:%M UTC')" \
+            --body "Agent Coder started on \`$BRANCH\` — $(date -u '+%Y-%m-%d %H:%M UTC') · model: \`$MODEL\`" \
             --repo "$REPO"
 
       - name: Fetch full issue body
@@ -137,6 +143,7 @@ jobs:
         working-directory: ${{ env.WORKTREE }}
         run: |
           claude -p "$(cat /tmp/agent-prompt.txt)" \
+            --model "$MODEL" \
             --dangerously-skip-permissions \
             2>&1 | tee /tmp/agent-run-$ISSUE_NUMBER.log
 
@@ -156,7 +163,7 @@ jobs:
               --remove-label "agent-coding" --add-label "agent-review" \
               --repo "$REPO" 2>/dev/null || true
             gh issue comment "$ISSUE_NUMBER" \
-              --body "Agent Coder finished -- PR opened: $PR_URL" \
+              --body "Agent Coder finished · model: \`$MODEL\` — PR: $PR_URL" \
               --repo "$REPO"
           elif echo "$CURRENT_LABELS" | grep -q "agent-review" || [ "$ISSUE_STATE" = "CLOSED" ]; then
             # Agent determined no change needed (self-labeled agent-review or closed the issue directly)
