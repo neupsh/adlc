@@ -157,7 +157,10 @@ jobs:
               --body "Agent Coder finished -- PR opened: $PR_URL" \
               --repo "$REPO"
           elif echo "$CURRENT_LABELS" | grep -q "agent-review"; then
-            : # agent self-transitioned (no code change needed)
+            # Agent determined no change needed — close the issue
+            gh issue close "$ISSUE_NUMBER" \
+              --comment "Closing — agent confirmed no code change required." \
+              --repo "$REPO" 2>/dev/null || true
           else
             gh issue edit "$ISSUE_NUMBER" \
               --remove-label "agent-coding" --add-label "agent-failed" \
