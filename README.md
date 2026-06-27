@@ -1,4 +1,4 @@
-# agentic-sdlc
+# adlc
 
 Reusable GitHub Actions workflow for autonomous AI-driven issue resolution.
 
@@ -9,7 +9,7 @@ Label any GitHub issue `agent-ready` → an agent clones the repo in a worktree,
 ```
 Issue labeled "agent-ready"
   → caller repo's agent-dispatch.yml fires
-    → calls neupsh/agentic-sdlc/.github/workflows/agent-issue.yml
+    → calls neupsh/adlc/.github/workflows/agent-issue.yml
       → self-hosted runner picks up the job
         → claude agent works in an isolated worktree
           → commits (GPG-signed), pushes, opens PR
@@ -24,8 +24,8 @@ Issue labeled "agent-ready"
 # Get a runner registration token from:
 # https://github.com/<owner>/<repo>/settings/actions/runners/new
 
-git clone https://github.com/neupsh/agentic-sdlc
-cd agentic-sdlc
+git clone https://github.com/neupsh/adlc
+cd adlc
 
 # Register + install as a persistent user-level systemd service
 ./scripts/install.sh \
@@ -75,7 +75,7 @@ Label any issue `agent-ready`. The agent fires within seconds.
 
 ## Project-specific configuration
 
-### Option A — `.agentic/conventions.md`
+### Option A — `.adlc/conventions.md`
 
 Create this file in your repo root. The agent reads it automatically:
 
@@ -104,11 +104,11 @@ with:
     - Run `npm run lint` before committing
 ```
 
-### Option C — `.agentic/build.sh`
+### Option C — `.adlc/build.sh`
 
 ```bash
 #!/usr/bin/env bash
-# .agentic/build.sh check|test
+# .adlc/build.sh check|test
 case "$1" in
   check) cargo check ;;
   test)  cargo test -p affected-crate ;;
@@ -121,10 +121,10 @@ esac
 
 ```bash
 # Check status
-systemctl --user status agentic-runner-your-org-your-repo
+systemctl --user status adlc-runner-your-org-your-repo
 
 # Restart
-systemctl --user restart agentic-runner-your-org-your-repo
+systemctl --user restart adlc-runner-your-org-your-repo
 
 # Uninstall
 ./scripts/uninstall.sh --repo your-org/your-repo --token <REMOVE_TOKEN>

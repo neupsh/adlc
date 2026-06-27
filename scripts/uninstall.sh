@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Uninstall the agentic-sdlc runner + service for a repo.
+# Uninstall the adlc runner + service for a repo.
 #
 # Usage: ./scripts/uninstall.sh --repo neupsh/iteratrade --token <RUNNER_REMOVE_TOKEN>
 

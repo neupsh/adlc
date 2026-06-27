@@ -66,11 +66,11 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Checkout agentic-sdlc scripts
+      - name: Checkout adlc scripts
         uses: actions/checkout@v4
         with:
-          repository: neupsh/agentic-sdlc
-          path: .agentic-sdlc
+          repository: neupsh/adlc
+          path: .adlc
           fetch-depth: 1
 
       - name: Configure git identity + GPG
@@ -134,7 +134,7 @@ jobs:
           BUILD_TEST: ${{ inputs.build_test_cmd }}
           CONVENTIONS: ${{ inputs.project_conventions }}
           AGENT_EMAIL: ${{ inputs.agent_email }}
-        run: bash .agentic-sdlc/scripts/build-prompt.sh
+        run: bash .adlc/scripts/build-prompt.sh
 
       - name: Run agent
         env:

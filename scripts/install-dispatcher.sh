@@ -53,7 +53,7 @@ jobs:
       contents: write
       issues: write
       pull-requests: write
-    uses: neupsh/agentic-sdlc/.github/workflows/agent-issue.yml@${SDLC_REF}
+    uses: neupsh/adlc/.github/workflows/agent-issue.yml@${SDLC_REF}
     with:
       issue_number: "\${{ github.event.issue.number }}"
       issue_title:  \${{ github.event.issue.title }}
@@ -72,6 +72,6 @@ echo "  2. Ensure these GitHub secrets exist in your repo:"
 echo "       GPG_PRIVATE_KEY, GPG_KEY_ID, GPG_PASSPHRASE"
 echo "  3. Ensure these labels exist in your repo's Issues:"
 echo "       agent-ready, agent-coding, agent-review, agent-failed"
-echo "  4. (Optional) Add .agentic/conventions.md for project-specific rules"
-echo "  5. (Optional) Add .agentic/build.sh for project-specific build steps"
+echo "  4. (Optional) Add .adlc/conventions.md for project-specific rules"
+echo "  5. (Optional) Add .adlc/build.sh for project-specific build steps"
 echo "  6. Label any issue 'agent-ready' to trigger the agent"

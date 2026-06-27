@@ -1,19 +1,19 @@
 #!/usr/bin/env bash
-# Install the agentic-sdlc runner + dispatcher in a target project.
+# Install the adlc runner + dispatcher in a target project.
 #
 # Usage:
-#   curl -sSfL https://raw.githubusercontent.com/neupsh/agentic-sdlc/main/scripts/install.sh | bash -s -- \
+#   curl -sSfL https://raw.githubusercontent.com/neupsh/adlc/main/scripts/install.sh | bash -s -- \
 #     --repo neupsh/iteratrade \
 #     --label ibkr \
 #     --token <RUNNER_REG_TOKEN>
 #
-#   Or clone agentic-sdlc and run locally:
+#   Or clone adlc and run locally:
 #     ./scripts/install.sh --repo neupsh/iteratrade --label ibkr --token <TOKEN>
 
 set -euo pipefail
 
 RUNNER_VERSION="2.323.0"
-AGENTIC_SDLC_REPO="neupsh/agentic-sdlc"
+ADLC_REPO="neupsh/adlc"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # ── Arg parsing ──────────────────────────────────────────────────────────────
@@ -42,7 +42,7 @@ fi
 REPO_URL="https://github.com/$REPO"
 RUNNER_DIR="$HOME/actions-runner-${REPO//\//-}"
 
-echo "==> Setting up agentic-sdlc runner for $REPO (label: $LABEL)"
+echo "==> Setting up adlc runner for $REPO (label: $LABEL)"
 
 # ── Install prerequisites ────────────────────────────────────────────────────
 if command -v apt-get &>/dev/null; then
@@ -187,12 +187,12 @@ on:
 jobs:
   dispatch:
     if: github.event.label.name == 'agent-ready'
-    uses: neupsh/agentic-sdlc/.github/workflows/agent-issue.yml@main
+    uses: neupsh/adlc/.github/workflows/agent-issue.yml@main
     with:
       issue_number: \${{ github.event.issue.number }}
       issue_title:  \${{ github.event.issue.title }}
       runner_labels: "["self-hosted","linux","${label}"]"
-      # build_check_cmd: ""   # override here or use .agentic/conventions.md
+      # build_check_cmd: ""   # override here or use .adlc/conventions.md
       # build_test_cmd:  ""
     secrets:
       GPG_PRIVATE_KEY: \${{ secrets.GPG_PRIVATE_KEY }}
