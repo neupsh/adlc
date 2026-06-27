@@ -1,5 +1,8 @@
 name: Agent Issue (Reusable)
 
+# Called by each project's agent-dispatch.yml on: issues: labeled.
+# The caller must set permissions: contents/issues/pull-requests: write.
+
 on:
   workflow_call:
     inputs:
@@ -19,14 +22,149 @@ on:
         required: false
         type: string
         default: ""
+      build_test_cmd:
+        description: Command to run tests
+        required: false
+        type: string
+        default: ""
+      project_conventions:
+        description: Project-specific conventions injected into the agent prompt
+        required: false
+        type: string
+        default: ""
+      agent_email:
+        description: Email identity for agent git commits
+        required: false
+        type: string
+        default: "agent-coder@agents.bot"
 
 jobs:
   run-agent:
     runs-on: ${{ fromJSON(inputs.runner_labels) }}
+    concurrency:
+      group: agent-issue-${{ inputs.issue_number }}
+      cancel-in-progress: false
     timeout-minutes: 60
+
     env:
       ISSUE_NUMBER: ${{ inputs.issue_number }}
+      ISSUE_TITLE: ${{ inputs.issue_title }}
       BRANCH: agent/issue-${{ inputs.issue_number }}
+      WORKTREE: /tmp/agent-worktrees/${{ inputs.issue_number }}
       REPO: ${{ github.repository }}
+
     steps:
-      - run: echo "Issue ${{ inputs.issue_number }}"
+      - name: Checkout caller repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Checkout agentic-sdlc scripts
+        uses: actions/checkout@v4
+        with:
+          repository: neupsh/agentic-sdlc
+          path: .agentic-sdlc
+          fetch-depth: 1
+
+      - name: Configure git identity + GPG
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+          GPG_KEY_ID: ${{ secrets.GPG_KEY_ID }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+          AGENT_EMAIL: ${{ inputs.agent_email }}
+        run: |
+          git config user.name "Agent Coder"
+          git config user.email "$AGENT_EMAIL"
+          echo "$GPG_PRIVATE_KEY" | gpg --batch --import
+          git config commit.gpgsign true
+          git config user.signingkey "$GPG_KEY_ID"
+          mkdir -p ~/.gnupg && chmod 700 ~/.gnupg
+          grep -qxF 'allow-loopback-pinentry' ~/.gnupg/gpg-agent.conf 2>/dev/null \
+            || echo "allow-loopback-pinentry" >> ~/.gnupg/gpg-agent.conf
+          gpg-connect-agent reloadagent /bye 2>/dev/null || true
+          echo "$GPG_PASSPHRASE" | gpg --batch --yes \
+            --pinentry-mode loopback --passphrase-fd 0 \
+            --sign /dev/null 2>/dev/null || true
+
+      - name: Create worktree
+        run: |
+          mkdir -p /tmp/agent-worktrees
+          if git worktree list | grep -q "$WORKTREE"; then
+            git worktree remove "$WORKTREE" --force
+          fi
+          git worktree add "$WORKTREE" -b "$BRANCH" HEAD
+
+      - name: Mark issue in-progress
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh issue edit "$ISSUE_NUMBER" \
+            --remove-label "agent-ready" \
+            --add-label "agent-coding" \
+            --repo "$REPO"
+          gh issue comment "$ISSUE_NUMBER" \
+            --body "Agent Coder started on $BRANCH -- $(date -u '+%Y-%m-%d %H:%M UTC')" \
+            --repo "$REPO"
+
+      - name: Fetch full issue body
+        id: issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BODY=$(gh issue view "$ISSUE_NUMBER" --json body -q '.body' --repo "$REPO")
+          echo "body<<EOF" >> $GITHUB_OUTPUT
+          echo "$BODY" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Build agent prompt
+        env:
+          ISSUE_BODY: ${{ steps.issue.outputs.body }}
+          BUILD_CHECK: ${{ inputs.build_check_cmd }}
+          BUILD_TEST: ${{ inputs.build_test_cmd }}
+          CONVENTIONS: ${{ inputs.project_conventions }}
+          AGENT_EMAIL: ${{ inputs.agent_email }}
+        run: bash .agentic-sdlc/scripts/build-prompt.sh
+
+      - name: Run agent
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GPG_TTY: /dev/tty
+        working-directory: ${{ env.WORKTREE }}
+        run: |
+          claude -p "$(cat /tmp/agent-prompt.txt)" \
+            --dangerously-skip-permissions \
+            2>&1 | tee /tmp/agent-run-$ISSUE_NUMBER.log
+
+      - name: Post result to issue
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PR_URL=$(gh pr list --head "$BRANCH" --json url -q '.[0].url' \
+            --repo "$REPO" 2>/dev/null || echo "")
+          CURRENT_LABELS=$(gh issue view "$ISSUE_NUMBER" --json labels \
+            -q '[.labels[].name] | join(",")' --repo "$REPO" 2>/dev/null || echo "")
+          if [ -n "$PR_URL" ]; then
+            gh issue edit "$ISSUE_NUMBER" \
+              --remove-label "agent-coding" --add-label "agent-review" \
+              --repo "$REPO" 2>/dev/null || true
+            gh issue comment "$ISSUE_NUMBER" \
+              --body "Agent Coder finished -- PR opened: $PR_URL" \
+              --repo "$REPO"
+          elif echo "$CURRENT_LABELS" | grep -q "agent-review"; then
+            : # agent self-transitioned (no code change needed)
+          else
+            gh issue edit "$ISSUE_NUMBER" \
+              --remove-label "agent-coding" --add-label "agent-failed" \
+              --repo "$REPO" 2>/dev/null || true
+            TAIL=$(tail -30 /tmp/agent-run-$ISSUE_NUMBER.log 2>/dev/null || echo "no log")
+            gh issue comment "$ISSUE_NUMBER" \
+              --body "Agent Coder failed -- no PR opened. Last output: $TAIL" \
+              --repo "$REPO"
+          fi
+
+      - name: Cleanup worktree
+        if: always()
+        run: |
+          git worktree remove "$WORKTREE" --force 2>/dev/null || true

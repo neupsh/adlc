@@ -49,18 +49,19 @@ on:
 jobs:
   dispatch:
     if: github.event.label.name == 'agent-ready'
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
     uses: neupsh/agentic-sdlc/.github/workflows/agent-issue.yml@${SDLC_REF}
     with:
-      issue_number: \${{ github.event.issue.number }}
+      issue_number: "\${{ github.event.issue.number }}"
       issue_title:  \${{ github.event.issue.title }}
-      runner_label: "${LABEL}"
+      runner_labels: '["self-hosted","linux","${LABEL}"]'
       # Uncomment and set project-specific build commands:
       # build_check_cmd: "cargo check"
       # build_test_cmd:  "cargo test"
-    secrets:
-      GPG_PRIVATE_KEY: \${{ secrets.GPG_PRIVATE_KEY }}
-      GPG_KEY_ID:      \${{ secrets.GPG_KEY_ID }}
-      GPG_PASSPHRASE:  \${{ secrets.GPG_PASSPHRASE }}
+    secrets: inherit
 EOF
 
 echo "Created: $OUT"
