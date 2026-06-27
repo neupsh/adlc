@@ -34,13 +34,6 @@ on:
         required: false
         type: string
         default: "agent-coder@agents.bot"
-    secrets:
-      GPG_PRIVATE_KEY:
-        required: true
-      GPG_KEY_ID:
-        required: true
-      GPG_PASSPHRASE:
-        required: true
 
 concurrency:
   group: agent-issue-${{ inputs.issue_number }}
