@@ -118,6 +118,11 @@ jobs:
           git worktree remove "$WORKTREE" --force 2>/dev/null || true
           git worktree prune
           git branch -D "$BRANCH" 2>/dev/null || true
+          # Sync the remote-tracking ref if a prior run already pushed this
+          # branch (crash/cancel after push). The fresh branch starts from HEAD,
+          # so the agent's push diverges from origin; updating the tracking ref
+          # lets its `git push --force-with-lease` safely overwrite it.
+          git fetch origin "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH" 2>/dev/null || true
           git worktree add "$WORKTREE" -b "$BRANCH" HEAD
 
       - name: Resolve issue type and model

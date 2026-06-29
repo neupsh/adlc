@@ -50,6 +50,11 @@ each extra runner is another concurrent agent process competing for CPU/RAM, and
 other repos register their own runners here, total machine load is the sum across all
 of them.
 
+Re-running `install.sh` reconciles to the requested count: lowering `--runners` (or
+upgrading from an older single-runner install) **disables** the now-stale services so
+concurrency never exceeds the cap. Those runners stay registered in GitHub as offline
+— run `uninstall.sh --repo … --token <remove-token>` to fully deregister them.
+
 Concurrent jobs never collide on disk — this holds across repos too, since two repos'
 runners on one machine can fire jobs at the same time:
 

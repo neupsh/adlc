@@ -18,7 +18,7 @@ Issue: #${ISSUE_NUMBER} — ${ISSUE_TITLE}
 4. Add a regression test that would have caught this bug
 5. Run build check (0 warnings) then tests
 6. Commit: \`git commit -S -m 'fix(<scope>): <description>'\`
-7. Push: \`git push origin ${BRANCH}\`
+7. Push: \`git push --force-with-lease origin ${BRANCH}\` (the branch is yours; a re-run may need to overwrite a prior push)
 8. Open PR: \`gh pr create --title 'fix: ...' --body 'Fixes #${ISSUE_NUMBER}. Root cause: ...'\`
 9. Label: \`gh issue edit ${ISSUE_NUMBER} --remove-label agent-coding --add-label agent-review --repo ${REPO}\`
 

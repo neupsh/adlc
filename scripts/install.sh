@@ -55,6 +55,42 @@ fi
 
 REPO_URL="https://github.com/$REPO"
 
+# ── Helper: drop dispatcher workflow (defined before first use) ───────────────
+install_dispatcher() {
+  local repo_path="$1"
+  local label="$2"
+  local wf_dir="$repo_path/.github/workflows"
+  mkdir -p "$wf_dir"
+  local out="$wf_dir/agent-dispatch.yml"
+  if [[ -f "$out" ]]; then
+    echo "    $out already exists — skipping (delete to regenerate)."
+    return
+  fi
+  cat > "$out" << DISPATCH_EOF
+name: Agentic Issue Dispatch
+
+on:
+  issues:
+    types: [labeled]
+
+jobs:
+  dispatch:
+    if: github.event.label.name == 'agent-ready'
+    uses: neupsh/adlc/.github/workflows/agent-issue.yml@main
+    with:
+      issue_number: \${{ github.event.issue.number }}
+      issue_title:  \${{ github.event.issue.title }}
+      runner_labels: '["self-hosted","linux","${label}"]'
+      # build_check_cmd: ""   # override here or use .adlc/conventions.md
+      # build_test_cmd:  ""
+    secrets:
+      GPG_PRIVATE_KEY: \${{ secrets.GPG_PRIVATE_KEY }}
+      GPG_KEY_ID:      \${{ secrets.GPG_KEY_ID }}
+      GPG_PASSPHRASE:  \${{ secrets.GPG_PASSPHRASE }}
+DISPATCH_EOF
+  echo "    Created: $out"
+}
+
 echo "==> Setting up adlc runner for $REPO (label: $LABEL)"
 
 # ── Install prerequisites ────────────────────────────────────────────────────
@@ -156,6 +192,37 @@ if $INSTALL_SERVICE; then
   echo "    Manage with: systemctl --user {status,stop,start,restart} agentic-runner-${REPO//\//-}-<1..$RUNNERS>"
 fi
 
+# ── Reconcile stale instances so concurrency never exceeds the cap ────────────
+# Older versions registered a single un-suffixed runner, and lowering --runners
+# (e.g. 3→1) leaves higher-numbered instances behind. Either keeps extra runners
+# alive past $RUNNERS, defeating the cap, so stop+disable any service for this
+# repo outside 1..$RUNNERS. The numeric-suffix glob is anchored (-+([0-9]), never
+# -2-1) so a sibling repo's services are untouched. We can't deregister from
+# GitHub without a remove token — those runners just go offline; run uninstall.sh
+# with a remove token (or delete them in repo settings) to fully clean up.
+SLUG="${REPO//\//-}"
+SVC_DIR="$HOME/.config/systemd/user"
+shopt -s nullglob
+STALE_SVCS=()
+[[ -f "$SVC_DIR/agentic-runner-${SLUG}.service" ]] && STALE_SVCS+=( "agentic-runner-${SLUG}" )  # legacy
+for f in "$SVC_DIR/agentic-runner-${SLUG}"-[0-9]*.service; do
+  name="$(basename "$f" .service)"
+  idx="${name#agentic-runner-${SLUG}-}"
+  [[ "$idx" =~ ^[0-9]+$ ]] || continue   # skip a sibling repo's services (e.g. -2-1)
+  (( idx > RUNNERS )) && STALE_SVCS+=( "$name" )
+done
+if (( ${#STALE_SVCS[@]} > 0 )); then
+  echo "==> Disabling ${#STALE_SVCS[@]} stale runner service(s) above the cap of $RUNNERS:"
+  for name in "${STALE_SVCS[@]}"; do
+    systemctl --user disable --now "$name" 2>/dev/null || true
+    rm -f "$SVC_DIR/${name}.service"
+    echo "    disabled $name (its runner stays registered in GitHub as offline)"
+  done
+  systemctl --user daemon-reload 2>/dev/null || true
+  echo "    To fully deregister: ./scripts/uninstall.sh --repo $REPO --token <remove-token>"
+  echo "    or remove offline runners at https://github.com/$REPO/settings/actions/runners"
+fi
+
 # ── Drop dispatcher workflow into caller repo ─────────────────────────────────
 if [[ -d "$HOME/Projects" || -d "$(pwd)" ]]; then
   # Try to find the caller repo local path
@@ -189,39 +256,3 @@ echo "    agent-ready, agent-coding, agent-review, agent-failed"
 echo ""
 echo "==> Claude auth (subscription, not API key — run once):"
 echo "    claude auth login"
-
-# ── Helper: drop dispatcher workflow ────────────────────────────────────────
-install_dispatcher() {
-  local repo_path="$1"
-  local label="$2"
-  local wf_dir="$repo_path/.github/workflows"
-  mkdir -p "$wf_dir"
-  local out="$wf_dir/agent-dispatch.yml"
-  if [[ -f "$out" ]]; then
-    echo "    $out already exists — skipping (delete to regenerate)."
-    return
-  fi
-  cat > "$out" << DISPATCH_EOF
-name: Agentic Issue Dispatch
-
-on:
-  issues:
-    types: [labeled]
-
-jobs:
-  dispatch:
-    if: github.event.label.name == 'agent-ready'
-    uses: neupsh/adlc/.github/workflows/agent-issue.yml@main
-    with:
-      issue_number: \${{ github.event.issue.number }}
-      issue_title:  \${{ github.event.issue.title }}
-      runner_labels: "["self-hosted","linux","${label}"]"
-      # build_check_cmd: ""   # override here or use .adlc/conventions.md
-      # build_test_cmd:  ""
-    secrets:
-      GPG_PRIVATE_KEY: \${{ secrets.GPG_PRIVATE_KEY }}
-      GPG_KEY_ID:      \${{ secrets.GPG_KEY_ID }}
-      GPG_PASSPHRASE:  \${{ secrets.GPG_PASSPHRASE }}
-DISPATCH_EOF
-  echo "    Created: $out"
-}

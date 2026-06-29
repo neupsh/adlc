@@ -33,10 +33,22 @@ SVC_DIR="$HOME/.config/systemd/user"
 
 shopt -s nullglob
 
-RUNNER_DIRS=( "$PREFIX_DIR"-[0-9]* )
+# Match instances of THIS repo only. A bare -[0-9]* glob also matches a sibling
+# repo's instances (org/app's glob eats org/app-2's actions-runner-org-app-2-1),
+# so keep only hits whose suffix after "<prefix>-" is all digits. Avoids extglob
+# so the script also passes `bash -n`.
+RUNNER_DIRS=()
+for d in "$PREFIX_DIR"-[0-9]*; do
+  suffix="${d#"$PREFIX_DIR"-}"
+  [[ "$suffix" =~ ^[0-9]+$ ]] && RUNNER_DIRS+=( "$d" )
+done
 [[ -d "$PREFIX_DIR" ]] && RUNNER_DIRS+=( "$PREFIX_DIR" )          # legacy
 
-SERVICE_FILES=( "$SVC_DIR/$PREFIX_SVC"-[0-9]*.service )
+SERVICE_FILES=()
+for f in "$SVC_DIR/$PREFIX_SVC"-[0-9]*.service; do
+  suffix="$(basename "$f" .service)"; suffix="${suffix#"$PREFIX_SVC"-}"
+  [[ "$suffix" =~ ^[0-9]+$ ]] && SERVICE_FILES+=( "$f" )
+done
 [[ -f "$SVC_DIR/$PREFIX_SVC.service" ]] && SERVICE_FILES+=( "$SVC_DIR/$PREFIX_SVC.service" )  # legacy
 
 if [[ ${#RUNNER_DIRS[@]} -eq 0 && ${#SERVICE_FILES[@]} -eq 0 ]]; then

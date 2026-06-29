@@ -13,7 +13,7 @@ cat >> "$OUT" << EOF
 2. Make the minimal correct fix -- no refactoring beyond what the issue requires
 3. Run the build check command (0 warnings) then the test command
 4. Commit: git commit -S -m '<type>(<scope>): <description>'
-5. Push: git push origin ${BRANCH}
+5. Push: git push --force-with-lease origin ${BRANCH}  (the branch is yours; a re-run may need to overwrite a prior push)
 6. Open PR against main with: gh pr create --title '...' --body 'Fixes #${ISSUE_NUMBER}. ...'
 7. Update issue label: gh issue edit ${ISSUE_NUMBER} --remove-label agent-coding --add-label agent-review
 
