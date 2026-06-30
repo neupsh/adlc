@@ -54,9 +54,10 @@ for r in $(seq 1 "$ROUNDS"); do
   # so non-blocking nits and rationale are visible without digging in the run log.
   if [ -s "$REVIEW_FILE" ]; then
     CFILE="$RUNNER_TEMP/review-comment.md"
-    { printf '🤖 **AI review** — round %s/%s (model `%s` · effort `%s`)\n\n' \
+    { printf '**🔍 Reviewer** — round %s/%s (model `%s` · effort `%s`)\n\n' \
         "$r" "$ROUNDS" "$REVIEWER_MODEL" "$REVIEWER_EFFORT"
-      cat "$REVIEW_FILE"; } > "$CFILE"
+      cat "$REVIEW_FILE"
+      printf '\n<sub>— adlc</sub>\n'; } > "$CFILE"
     gh pr comment "$PR_NUMBER" --repo "$REPO" --body-file "$CFILE" || true
   fi
 
@@ -104,22 +105,22 @@ if $approved; then
     CLOSES=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json closingIssuesReferences --jq '.closingIssuesReferences[].number' 2>/dev/null || true)
     if gh pr merge "$PR_NUMBER" --repo "$REPO" --"$METHOD" --delete-branch; then
       gh pr comment "$PR_NUMBER" --repo "$REPO" \
-        --body "AI review approved and auto-merged (opt-in label \`$LABEL\`)." || true
+        --body "**🔍 Reviewer** approved and auto-merged (opt-in label \`$LABEL\`). <sub>— adlc</sub>" || true
       # GITHUB_TOKEN merges don't trigger GitHub's auto-close — close them ourselves.
       for iss in $CLOSES; do
         echo "review-loop: closing issue #$iss (resolved by PR #$PR_NUMBER)"
         gh issue close "$iss" --repo "$REPO" --reason completed \
-          --comment "Resolved by merged PR #$PR_NUMBER." || true
+          --comment "**✅ Resolved** by merged PR #$PR_NUMBER. <sub>— adlc</sub>" || true
       done
     else
       gh pr comment "$PR_NUMBER" --repo "$REPO" \
-        --body "AI review approved but the merge failed — needs a human." || true
+        --body "**🔍 Reviewer** approved, but the merge failed — needs a human. <sub>— adlc</sub>" || true
     fi
   else
     gh pr comment "$PR_NUMBER" --repo "$REPO" \
-      --body "AI review approved. No \`$LABEL\` label, so leaving this for human approval." || true
+      --body "**🔍 Reviewer** approved. No \`$LABEL\` label, so leaving this for human approval. <sub>— adlc</sub>" || true
   fi
 else
   gh pr comment "$PR_NUMBER" --repo "$REPO" \
-    --body "AI review did not converge after $ROUNDS round(s) — handing off to a human reviewer." || true
+    --body "**🔍 Reviewer** did not converge after $ROUNDS round(s) — handing off to a human reviewer. <sub>— adlc</sub>" || true
 fi

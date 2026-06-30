@@ -21,8 +21,8 @@ This worktree is that branch, already checked out with your earlier work. A revi
 4. Commit (signed): \`git commit -S -m '<type>(<scope>): address review feedback'\`
 5. Push to the SAME branch — this updates the existing PR, do NOT open a new one:
    \`git push origin ${PR_BRANCH}\`
-6. Comment on the PR summarizing what you changed:
-   \`gh pr comment ${PR_NUMBER} --body "..." --repo ${REPO}\`
+6. Comment on the PR summarizing what you changed (prefix with the role tag):
+   \`gh pr comment ${PR_NUMBER} --body "**🛠 Coder** ..." --repo ${REPO}\`
 
 If a point is unclear or you disagree, say so in the PR comment instead of guessing.
 If a point was already handled in your earlier work, note that rather than redoing it.
