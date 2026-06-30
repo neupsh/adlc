@@ -82,11 +82,18 @@ done
 
 # ── Outcome ───────────────────────────────────────────────────────────────────
 # The auto-merge label may sit on the PR or the originating issue — check both.
+# Fetch via the REST API (reliable under GITHUB_TOKEN), capture, then match in-shell
+# — and log what we actually found so a "no label" outcome is self-diagnosing.
 has_label() {
-  {
-    gh pr view "$PR_NUMBER" --repo "$REPO" --json labels -q '.labels[].name' 2>/dev/null
-    [ -n "$ISSUE_NUMBER" ] && gh issue view "$ISSUE_NUMBER" --repo "$REPO" --json labels -q '.labels[].name' 2>/dev/null
-  } | grep -Fqx "$LABEL"
+  local labels
+  labels=$( { gh api "repos/$REPO/issues/$PR_NUMBER/labels" --jq '.[].name' 2>/dev/null
+              [ -n "$ISSUE_NUMBER" ] && gh api "repos/$REPO/issues/$ISSUE_NUMBER/labels" --jq '.[].name' 2>/dev/null
+            } || true )
+  echo "review-loop: looking for '$LABEL' among labels: [$(printf '%s' "$labels" | tr '\n' ' ')]" >&2
+  case $'\n'"$labels"$'\n' in
+    *$'\n'"$LABEL"$'\n'*) return 0 ;;
+    *) return 1 ;;
+  esac
 }
 
 if $approved; then
