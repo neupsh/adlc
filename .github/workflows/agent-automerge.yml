@@ -52,11 +52,15 @@ jobs:
             exit 0
           fi
 
-          # Opt-in gate: only merge PRs that explicitly carry the label.
-          if ! gh pr view "$PR" --repo "$REPO" --json labels -q '.labels[].name' | grep -Fqx "$LABEL"; then
-            echo "PR #$PR not labeled '$LABEL' — leaving it for manual review."
-            exit 0
-          fi
+          # Opt-in gate: only merge PRs that explicitly carry the label. Fetch via the
+          # REST API, capture, then match in-shell (avoids any pipe/pipefail surprises)
+          # and log what we found.
+          LABELS=$(gh api "repos/$REPO/issues/$PR/labels" --jq '.[].name' 2>/dev/null || true)
+          echo "auto-merge: looking for '$LABEL' among labels: [$(printf '%s' "$LABELS" | tr '\n' ' ')]"
+          case $'\n'"$LABELS"$'\n' in
+            *$'\n'"$LABEL"$'\n'*) : ;;
+            *) echo "PR #$PR not labeled '$LABEL' — leaving it for manual review."; exit 0 ;;
+          esac
 
           # The review-approved event is the gate (the caller's if: enforces it).
           # No branch protection on free private repos, so merge directly.
