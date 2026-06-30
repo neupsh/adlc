@@ -1,0 +1,30 @@
+name: Lint workflows
+
+# actionlint validates the GitHub Actions schema, catching errors that plain YAML
+# parsing misses — e.g. using the `runner` context in a job-level env: block,
+# which silently broke agent-issue.yml (GitHub rejected the whole file with a 0s
+# "workflow file issue" run). shellcheck integration is disabled to keep this guard
+# focused on workflow schema rather than shell-style nits inside run: blocks.
+
+on:
+  push:
+    paths:
+      - .github/workflows/**
+  pull_request:
+    paths:
+      - .github/workflows/**
+
+permissions:
+  contents: read
+
+jobs:
+  actionlint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run actionlint
+        run: |
+          VERSION=1.7.7
+          curl -sSfL "https://github.com/rhysd/actionlint/releases/download/v${VERSION}/actionlint_${VERSION}_linux_amd64.tar.gz" \
+            | tar xz actionlint
+          ./actionlint -color -shellcheck=
