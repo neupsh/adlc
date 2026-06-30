@@ -138,16 +138,28 @@ model. The issue moves `agent-ready` → `agent-coding` → `agent-review` (PR o
 
 ---
 
-## Review loop (you review, the agent fixes)
+## Review loop
 
-When you review an agent PR and submit a **"Request changes"** review, the coder agent
-picks up **all** your feedback — the review body, inline comments, and PR conversation
-comments — and revises the PR **in place** (same branch, no new PR). Then you review
-again. Repeat until you **Approve**.
+Two reviewers feed the same coder agent: an automatic AI pass, then you.
 
-- The trigger is a formal **Request changes** review. A plain PR comment on its own does
-  **not** fire a revise — leave your comments, then submit the review as "Request
-  changes". (Once submitted, the agent reads the conversation comments too.)
+**AI review (automatic).** Right after the coder opens the PR — in the *same* run — an
+AI reviewer (Opus) judges the diff. If it requests changes, the coder fixes them and
+the reviewer looks again, up to `review_rounds` rounds (default **3**). This runs
+inline because a `GITHUB_TOKEN`-authored review can't trigger another workflow. Outcome:
+- **Approved** → if the issue has `auto-merge`, the PR is merged; otherwise it waits for you.
+- **Didn't converge** in N rounds → it stops and hands off to you at `agent-review`.
+- Set `review_rounds: "0"` in your dispatcher to disable the AI reviewer.
+
+> An AI reviewing the same pipeline's AI-written code is correlated — treat it as a
+> strong first-pass lint, not a substitute for your review.
+
+**Your review.** Submit a **"Request changes"** review *or* comment **`/fix`** on the PR,
+and the coder agent picks up **all** feedback (review body, inline comments, conversation
+comments) and revises the PR **in place** (same branch, no new PR). Re-review; repeat
+until you **Approve**.
+
+- A plain comment without `/fix` and without a formal "Request changes" review does
+  **not** fire a revise. `/fix` only works from a repo collaborator.
 - Each revise round commits (signed) and pushes to the PR branch.
 - With the `auto-merge` label, your **Approve** then merges the PR (see below).
 
@@ -162,15 +174,20 @@ opt it in with the **`auto-merge`** label:
 - Add `auto-merge` to the **issue** (alongside `agent-ready`) and it's copied onto the
   PR when the agent opens it. To opt in *after* the PR exists, add `auto-merge` directly
   to the **PR**.
-- When someone **approves** the PR, it merges automatically (squash, branch deleted).
-  Unlabeled PRs are never touched.
+- It merges (squash, branch deleted) when **either** the inline AI reviewer approves
+  (during the coder run) **or** a human approves the PR. Unlabeled PRs are never touched.
 
-The merge runs on a GitHub-hosted runner — no agent or self-hosted runner involved.
+So a labeled issue can go all the way **hands-off**: agent writes → AI reviews →
+approves → merges, with no human in the loop. Leave the label off and it always stops
+for your review.
 
-> **Note:** the approval must come from a human (or a token that isn't the default
-> `GITHUB_TOKEN`). GitHub does not re-trigger workflows for events authored by
-> `GITHUB_TOKEN`, so a future reviewer-agent that approves with the built-in token
-> won't trip auto-merge — it would need a PAT or GitHub App token.
+Mechanics: the AI-approval merge happens inline in the coder's run; the human-approval
+merge runs on a GitHub-hosted runner via the `pull_request_review` event.
+
+> **Note:** a human **`/fix`** comment or review fires the agent because those events
+> are human-authored. GitHub does **not** re-trigger workflows for `GITHUB_TOKEN`-authored
+> events, which is exactly why the AI review→fix→merge loop runs inline (one job) rather
+> than as separate event-triggered workflows.
 
 ---
 

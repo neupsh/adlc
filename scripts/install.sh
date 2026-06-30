@@ -74,6 +74,8 @@ on:
     types: [labeled]
   pull_request_review:
     types: [submitted]
+  issue_comment:
+    types: [created]
 
 jobs:
   dispatch:
@@ -91,16 +93,17 @@ jobs:
       # build_test_cmd:  ""
     secrets: inherit
 
-  # A "Request changes" review sends the PR back to the agent to fix, in place.
+  # A "Request changes" review (or a '/fix' comment from a collaborator) sends the
+  # PR back to the agent to fix, in place.
   revise:
-    if: github.event_name == 'pull_request_review' && github.event.review.state == 'changes_requested'
+    if: (github.event_name == 'pull_request_review' && github.event.review.state == 'changes_requested') || (github.event_name == 'issue_comment' && github.event.issue.pull_request != null && contains(github.event.comment.body, '/fix') && contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association))
     permissions:
       contents: write
       issues: write
       pull-requests: write
     uses: neupsh/adlc/.github/workflows/agent-revise.yml@main
     with:
-      pr_number: \${{ github.event.pull_request.number }}
+      pr_number: \${{ github.event.pull_request.number || github.event.issue.number }}
       runner_labels: '["self-hosted","linux","${label}"]'
       # build_check_cmd / build_test_cmd: keep in sync with the dispatch job above
     secrets: inherit

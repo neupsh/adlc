@@ -12,8 +12,8 @@ cat >> "$OUT" << EOF
 ## Your task (address review feedback)
 
 You previously opened PR #${PR_NUMBER} (branch \`${PR_BRANCH}\`) for issue #${ISSUE_NUMBER}.
-This worktree is that branch, already checked out with your earlier work. A human
-reviewer left the feedback below — address ALL of it.
+This worktree is that branch, already checked out with your earlier work. A reviewer
+(human or AI) left the feedback below — address ALL of it.
 
 1. Read each point of feedback and the relevant code before changing anything
 2. Make the minimal correct changes it asks for — no unrelated refactoring

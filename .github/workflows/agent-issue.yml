@@ -42,6 +42,16 @@ on:
         required: false
         type: string
         default: "claude-sonnet-4-6"
+      review_rounds:
+        description: Max inline AI review↔fix rounds (0 disables the AI reviewer)
+        required: false
+        type: string
+        default: "3"
+      reviewer_model:
+        description: Claude model for the AI reviewer
+        required: false
+        type: string
+        default: "claude-opus-4-8"
 
 jobs:
   run-agent:
@@ -212,6 +222,24 @@ jobs:
             --model "$MODEL" \
             --dangerously-skip-permissions \
             2>&1 | tee "$RUN_LOG"
+
+      - name: AI review loop
+        # Inline (same job) because a GITHUB_TOKEN-authored review/push can't trigger
+        # another workflow. No-ops if the coder opened no PR or review_rounds == 0.
+        if: ${{ inputs.review_rounds != '0' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GPG_TTY: /dev/tty
+          REVIEW_ROUNDS: ${{ inputs.review_rounds }}
+          REVIEWER_MODEL: ${{ inputs.reviewer_model }}
+          AGENT_EMAIL: ${{ inputs.agent_email }}
+          CONVENTIONS: ${{ inputs.project_conventions }}
+          BUILD_CHECK: ${{ inputs.build_check_cmd }}
+          BUILD_TEST: ${{ inputs.build_test_cmd }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          ADLC_DIR: ${{ github.workspace }}/.adlc/scripts
+        working-directory: ${{ env.WORKTREE }}
+        run: bash "$ADLC_DIR/review-loop.sh" 2>&1 | tee -a "$RUN_LOG"
 
       - name: Post result to issue
         if: always()
