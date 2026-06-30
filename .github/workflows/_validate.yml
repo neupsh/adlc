@@ -1,0 +1,32 @@
+name: _validate (throwaway — delete before merge)
+
+# Throwaway: pushing this branch makes GitHub PARSE all three reusable workflows
+# (via local `uses: ./`). If any has a workflow-file/context error (e.g. a secret
+# referenced in a job-level env: block), the run is startup_failure. Valid files
+# instead queue (issue/revise target a label no runner has) — that's the pass signal.
+on:
+  push:
+    branches: [fix/job-env-secret-startup]
+
+jobs:
+  v-issue:
+    uses: ./.github/workflows/agent-issue.yml
+    with:
+      issue_number: "0"
+      issue_title: "validate"
+      runner_labels: '["self-hosted","__adlc_validate_no_runner__"]'
+      review_rounds: "0"
+    secrets: inherit
+
+  v-revise:
+    uses: ./.github/workflows/agent-revise.yml
+    with:
+      pr_number: "0"
+      runner_labels: '["self-hosted","__adlc_validate_no_runner__"]'
+    secrets: inherit
+
+  v-automerge:
+    uses: ./.github/workflows/agent-automerge.yml
+    with:
+      pr_number: "0"
+    secrets: inherit

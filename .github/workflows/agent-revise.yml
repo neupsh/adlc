@@ -77,12 +77,12 @@ jobs:
       REPO: ${{ github.repository }}
       MODEL: ${{ inputs.model }}
       MODE: ${{ inputs.mode }}
-      # Default auth token. "Resolve auth token" overrides it (via $GITHUB_ENV) only
-      # when a GitHub App is configured; the no-app path keeps using GITHUB_TOKEN.
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # NB: GH_TOKEN is NOT set here — `secrets` is not available in job-level env:
+      # (GitHub rejects the workflow at startup). Each gh/git step sets its own.
 
     steps:
       # Optional branded bot identity — see agent-issue.yml for the full rationale.
+      # Each gh/git step uses GH_TOKEN: ${{ steps.apptoken.outputs.token || secrets.GITHUB_TOKEN }}.
       - name: Detect GitHub App credentials
         id: appdetect
         env:
@@ -90,8 +90,10 @@ jobs:
         run: |
           if [ -n "$APP_ID" ]; then
             echo "present=true" >> "$GITHUB_OUTPUT"
+            echo "adlc: GitHub App configured — bot actions attributed to the app[bot]"
           else
             echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "adlc: no GitHub App secrets — using GITHUB_TOKEN (github-actions[bot])"
           fi
 
       - name: Mint GitHub App token
@@ -102,14 +104,6 @@ jobs:
         with:
           app-id: ${{ secrets.ADLC_APP_ID }}
           private-key: ${{ secrets.ADLC_APP_PRIVATE_KEY }}
-
-      - name: Resolve auth token
-        if: steps.appdetect.outputs.present == 'true'
-        env:
-          APP_TOKEN: ${{ steps.apptoken.outputs.token }}
-        run: |
-          printf 'GH_TOKEN=%s\n' "$APP_TOKEN" >> "$GITHUB_ENV"
-          echo "adlc: using GitHub App token (${{ steps.apptoken.outputs.app-slug }}[bot])"
 
       - name: Resolve per-runner temp paths
         run: |
@@ -169,6 +163,8 @@ jobs:
         run: bash .adlc/scripts/setup-commit-trailers.sh
 
       - name: Resolve PR branch + gather review feedback
+        env:
+          GH_TOKEN: ${{ steps.apptoken.outputs.token || secrets.GITHUB_TOKEN }}
         run: |
           PR_BRANCH=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json headRefName -q .headRefName)
           echo "PR_BRANCH=$PR_BRANCH" >> "$GITHUB_ENV"
@@ -205,6 +201,8 @@ jobs:
           git worktree add -B "$PR_BRANCH" "$WORKTREE" "origin/$PR_BRANCH"
 
       - name: Note start
+        env:
+          GH_TOKEN: ${{ steps.apptoken.outputs.token || secrets.GITHUB_TOKEN }}
         run: |
           if [ "$MODE" = review ]; then
             MSG="**🔍 Reviewer** is reviewing this PR (\`$PR_BRANCH\`) — model \`${{ inputs.reviewer_model }}\` · effort \`${{ inputs.reviewer_effort }}\`, up to ${{ inputs.review_rounds }} round(s)"
@@ -229,6 +227,7 @@ jobs:
       - name: Run agent (revise)
         if: ${{ inputs.mode != 'review' }}
         env:
+          GH_TOKEN: ${{ steps.apptoken.outputs.token || secrets.GITHUB_TOKEN }}
           GPG_TTY: /dev/tty
           EFFORT: ${{ inputs.effort }}
         working-directory: ${{ env.WORKTREE }}
@@ -242,6 +241,7 @@ jobs:
       - name: AI review loop (on demand)
         if: ${{ inputs.mode == 'review' }}
         env:
+          GH_TOKEN: ${{ steps.apptoken.outputs.token || secrets.GITHUB_TOKEN }}
           GPG_TTY: /dev/tty
           REVIEW_ROUNDS: ${{ inputs.review_rounds }}
           REVIEWER_MODEL: ${{ inputs.reviewer_model }}
@@ -258,6 +258,8 @@ jobs:
 
       - name: Report failure
         if: failure()
+        env:
+          GH_TOKEN: ${{ steps.apptoken.outputs.token || secrets.GITHUB_TOKEN }}
         run: |
           TAIL=$(tail -30 "$RUN_LOG" 2>/dev/null || echo "no log")
           gh pr comment "$PR_NUMBER" --repo "$REPO" \

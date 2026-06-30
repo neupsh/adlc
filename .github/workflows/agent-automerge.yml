@@ -30,9 +30,8 @@ jobs:
       pull-requests: write
       issues: write          # close linked issues after merge (GITHUB_TOKEN path)
     env:
-      # Default auth token. "Resolve auth token" overrides it (via $GITHUB_ENV) only
-      # when a GitHub App is configured; the no-app path keeps using GITHUB_TOKEN.
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # NB: no GH_TOKEN here — `secrets` is not available in job-level env: (GitHub
+      # rejects the workflow at startup). The merge step sets its own GH_TOKEN.
       REPO: ${{ github.repository }}
       PR: ${{ inputs.pr_number }}
       LABEL: ${{ inputs.auto_merge_label }}
@@ -49,8 +48,10 @@ jobs:
         run: |
           if [ -n "$APP_ID" ]; then
             echo "present=true" >> "$GITHUB_OUTPUT"
+            echo "adlc: GitHub App configured — merge/comments attributed to the app[bot]"
           else
             echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "adlc: no GitHub App secrets — using GITHUB_TOKEN (github-actions[bot])"
           fi
 
       - name: Mint GitHub App token
@@ -61,15 +62,9 @@ jobs:
           app-id: ${{ secrets.ADLC_APP_ID }}
           private-key: ${{ secrets.ADLC_APP_PRIVATE_KEY }}
 
-      - name: Resolve auth token
-        if: steps.appdetect.outputs.present == 'true'
-        env:
-          APP_TOKEN: ${{ steps.apptoken.outputs.token }}
-        run: |
-          printf 'GH_TOKEN=%s\n' "$APP_TOKEN" >> "$GITHUB_ENV"
-          echo "adlc: using GitHub App token (${{ steps.apptoken.outputs.app-slug }}[bot])"
-
       - name: Merge if opted-in and approved
+        env:
+          GH_TOKEN: ${{ steps.apptoken.outputs.token || secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
 
