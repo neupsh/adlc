@@ -42,6 +42,11 @@ on:
         required: false
         type: string
         default: "claude-sonnet-4-6"
+      effort:
+        description: "Reasoning effort for the coding agent (low|medium|high|xhigh|max)"
+        required: false
+        type: string
+        default: "medium"
       review_rounds:
         description: Max inline AI review↔fix rounds (0 disables the AI reviewer)
         required: false
@@ -51,7 +56,12 @@ on:
         description: Claude model for the AI reviewer
         required: false
         type: string
-        default: "claude-opus-4-8"
+        default: "claude-sonnet-4-6"
+      reviewer_effort:
+        description: "Reasoning effort for the AI reviewer (low|medium|high|xhigh|max)"
+        required: false
+        type: string
+        default: "high"
 
 jobs:
   run-agent:
@@ -224,10 +234,12 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GPG_TTY: /dev/tty
+          EFFORT: ${{ inputs.effort }}
         working-directory: ${{ env.WORKTREE }}
         run: |
           claude -p "$(cat "$PROMPT_FILE")" \
             --model "$MODEL" \
+            --effort "$EFFORT" \
             --dangerously-skip-permissions \
             2>&1 | tee "$RUN_LOG"
 
@@ -240,6 +252,8 @@ jobs:
           GPG_TTY: /dev/tty
           REVIEW_ROUNDS: ${{ inputs.review_rounds }}
           REVIEWER_MODEL: ${{ inputs.reviewer_model }}
+          REVIEWER_EFFORT: ${{ inputs.reviewer_effort }}
+          EFFORT: ${{ inputs.effort }}
           AGENT_EMAIL: ${{ inputs.agent_email }}
           CONVENTIONS: ${{ inputs.project_conventions }}
           BUILD_CHECK: ${{ inputs.build_check_cmd }}

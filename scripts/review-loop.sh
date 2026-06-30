@@ -16,7 +16,9 @@ set -Eeuo pipefail
 
 ADLC="${ADLC_DIR:?ADLC_DIR (path to adlc scripts) is required}"
 ROUNDS="${REVIEW_ROUNDS:-3}"
-REVIEWER_MODEL="${REVIEWER_MODEL:-claude-opus-4-8}"
+REVIEWER_MODEL="${REVIEWER_MODEL:-claude-sonnet-4-6}"
+REVIEWER_EFFORT="${REVIEWER_EFFORT:-high}"
+EFFORT="${EFFORT:-medium}"
 LABEL="${AUTO_MERGE_LABEL:-auto-merge}"
 METHOD="${MERGE_METHOD:-squash}"
 DEFAULT_BRANCH="${DEFAULT_BRANCH:-main}"
@@ -42,7 +44,7 @@ for r in $(seq 1 "$ROUNDS"); do
   PROMPT_FILE="$PROMPT_FILE" REVIEW_FILE="$REVIEW_FILE" PR_NUMBER="$PR_NUMBER" \
     ISSUE_NUMBER="$ISSUE_NUMBER" DEFAULT_BRANCH="$DEFAULT_BRANCH" REPO="$REPO" \
     CONVENTIONS="${CONVENTIONS:-}" bash "$ADLC/prompts/review.sh"
-  claude -p "$(cat "$PROMPT_FILE")" --model "$REVIEWER_MODEL" \
+  claude -p "$(cat "$PROMPT_FILE")" --model "$REVIEWER_MODEL" --effort "$REVIEWER_EFFORT" \
     --dangerously-skip-permissions 2>&1 | tee "$RUN_LOG" || true
 
   verdict=$(head -n1 "$REVIEW_FILE" 2>/dev/null | tr -d '\r' || true)
@@ -64,14 +66,17 @@ for r in $(seq 1 "$ROUNDS"); do
     FEEDBACK_FILE="$REVIEW_FILE" AGENT_EMAIL="${AGENT_EMAIL:-agent-coder@agents.bot}" \
     CONVENTIONS="${CONVENTIONS:-}" BUILD_CHECK="${BUILD_CHECK:-}" BUILD_TEST="${BUILD_TEST:-}" \
     bash "$ADLC/build-prompt.sh"
-  claude -p "$(cat "$PROMPT_FILE")" --model "$MODEL" \
+  claude -p "$(cat "$PROMPT_FILE")" --model "$MODEL" --effort "$EFFORT" \
     --dangerously-skip-permissions 2>&1 | tee "$RUN_LOG" || true
 done
 
 # ── Outcome ───────────────────────────────────────────────────────────────────
+# The auto-merge label may sit on the PR or the originating issue — check both.
 has_label() {
-  gh issue view "$ISSUE_NUMBER" --repo "$REPO" --json labels -q '.labels[].name' 2>/dev/null \
-    | grep -Fqx "$LABEL"
+  {
+    gh pr view "$PR_NUMBER" --repo "$REPO" --json labels -q '.labels[].name' 2>/dev/null
+    [ -n "$ISSUE_NUMBER" ] && gh issue view "$ISSUE_NUMBER" --repo "$REPO" --json labels -q '.labels[].name' 2>/dev/null
+  } | grep -Fqx "$LABEL"
 }
 
 if $approved; then
