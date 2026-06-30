@@ -25,10 +25,13 @@ jobs:
   auto-merge:
     # Lightweight gh-only job — no agent, no self-hosted runner needed.
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      pull-requests: write
-      issues: write          # close linked issues after merge (GITHUB_TOKEN path)
+    # No `permissions:` block here ON PURPOSE: a reusable workflow that DECLARES more
+    # permissions than its caller grants is a startup_failure that poisons the whole
+    # caller dispatcher for every event. This reusable inherits the caller auto-merge
+    # job's permissions instead (like agent-issue/agent-revise do). The caller must
+    # grant contents+pull-requests:write to merge, and issues:write to close linked
+    # issues (install-dispatcher.sh grants all three; older dispatchers granting only
+    # contents+pull-requests still merge — the issue-close just no-ops via `|| true`).
     env:
       # NB: no GH_TOKEN here — `secrets` is not available in job-level env: (GitHub
       # rejects the workflow at startup). The merge step sets its own GH_TOKEN.
