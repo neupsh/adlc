@@ -82,10 +82,9 @@ jobs:
       BRANCH: agent/issue-${{ inputs.issue_number }}
       REPO: ${{ github.repository }}
       MODEL: ${{ inputs.model }}
-      # Default auth token for every gh/git step. The "Resolve auth token" step
-      # below overrides this (via $GITHUB_ENV) ONLY when a GitHub App is configured,
-      # so the no-app path provably keeps using GITHUB_TOKEN exactly as before.
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # NB: GH_TOKEN is NOT set here — the `secrets` context is not available in a
+      # job-level env: block (GitHub rejects the whole workflow at startup). The
+      # "Resolve auth token" step sets GH_TOKEN via $GITHUB_ENV for every later step.
       # WORKTREE / PROMPT_FILE / RUN_LOG are derived from RUNNER_TEMP in the first
       # step below. They can't live here: the `runner` context is not available in
       # a job-level env: block (only inside steps), and using it makes GitHub
@@ -95,10 +94,12 @@ jobs:
       # ── Optional branded bot identity ──────────────────────────────────────
       # If ADLC_APP_ID / ADLC_APP_PRIVATE_KEY are set, every bot action (push, PR,
       # comments, merge) is attributed to YOUR GitHub App instead of
-      # github-actions[bot]. Absent those secrets, everything falls back to
+      # github-actions[bot]. Absent those secrets, "Resolve auth token" falls back to
       # GITHUB_TOKEN — identical to before. App-authored events can also trigger
-      # other workflows (GITHUB_TOKEN's can't), so the dispatcher excludes Bot
-      # actors to avoid the inline reviewer's comments looping back.
+      # other workflows (GITHUB_TOKEN's can't), so the dispatcher excludes Bot actors
+      # to avoid the inline reviewer's comments looping back. (`secrets` isn't usable
+      # in `if:`, so a detect step converts its presence into an output that gates
+      # the mint step.)
       - name: Detect GitHub App credentials
         id: appdetect
         env:
@@ -106,8 +107,10 @@ jobs:
         run: |
           if [ -n "$APP_ID" ]; then
             echo "present=true" >> "$GITHUB_OUTPUT"
+            echo "adlc: GitHub App configured — bot actions attributed to the app[bot]"
           else
             echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "adlc: no GitHub App secrets — using GITHUB_TOKEN (github-actions[bot])"
           fi
 
       - name: Mint GitHub App token
@@ -122,12 +125,22 @@ jobs:
           private-key: ${{ secrets.ADLC_APP_PRIVATE_KEY }}
 
       - name: Resolve auth token
-        if: steps.appdetect.outputs.present == 'true'
+        # Sets GH_TOKEN for every later step (and checkout) via $GITHUB_ENV: the app
+        # token when configured, else GITHUB_TOKEN. APP_TOKEN and DEFAULT_TOKEN are
+        # each their OWN single-context expression — GitHub rejects a steps+secrets
+        # mix in one ${{ }} with startup_failure (actionlint does not catch it), so
+        # never write `${{ steps.x.outputs.y || secrets.Z }}`.
         env:
           APP_TOKEN: ${{ steps.apptoken.outputs.token }}
+          DEFAULT_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          printf 'GH_TOKEN=%s\n' "$APP_TOKEN" >> "$GITHUB_ENV"
-          echo "adlc: using GitHub App token (${{ steps.apptoken.outputs.app-slug }}[bot])"
+          if [ -n "$APP_TOKEN" ]; then
+            printf 'GH_TOKEN=%s\n' "$APP_TOKEN" >> "$GITHUB_ENV"
+            echo "adlc: using GitHub App token"
+          else
+            printf 'GH_TOKEN=%s\n' "$DEFAULT_TOKEN" >> "$GITHUB_ENV"
+            echo "adlc: using GITHUB_TOKEN (github-actions[bot])"
+          fi
 
       - name: Resolve per-runner temp paths
         # RUNNER_TEMP is unique per runner instance and wiped each job, so the
@@ -142,8 +155,9 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          # App token when configured (so pushes are attributed to the app), else GITHUB_TOKEN.
-          token: ${{ steps.apptoken.outputs.token || secrets.GITHUB_TOKEN }}
+          # Resolved by "Resolve auth token": app token (pushes attributed to the app)
+          # when configured, else GITHUB_TOKEN.
+          token: ${{ env.GH_TOKEN }}
 
       - name: Checkout adlc scripts
         uses: actions/checkout@v4
