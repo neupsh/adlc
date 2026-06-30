@@ -50,6 +50,15 @@ for r in $(seq 1 "$ROUNDS"); do
   verdict=$(head -n1 "$REVIEW_FILE" 2>/dev/null | tr -d '\r' || true)
   echo "review-loop: verdict = '${verdict:-<none>}'"
 
+  # Surface the reviewer's full findings on the PR (not just the final outcome),
+  # so non-blocking nits and rationale are visible without digging in the run log.
+  if [ -s "$REVIEW_FILE" ]; then
+    CFILE="$RUNNER_TEMP/review-comment.md"
+    { printf '🤖 **AI review** — round %s/%s (`%s`)\n\n' "$r" "$ROUNDS" "$REVIEWER_MODEL"
+      cat "$REVIEW_FILE"; } > "$CFILE"
+    gh pr comment "$PR_NUMBER" --repo "$REPO" --body-file "$CFILE" || true
+  fi
+
   # Approve only on an explicit APPROVE. Anything else (request changes, or an
   # unparseable/missing verdict) is treated as "needs work" — fail safe.
   if printf '%s' "$verdict" | grep -qiE 'VERDICT:[[:space:]]*APPROVE'; then
