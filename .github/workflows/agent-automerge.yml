@@ -60,6 +60,9 @@ jobs:
       - name: Mint GitHub App token
         id: apptoken
         if: steps.appdetect.outputs.present == 'true'
+        # A mint failure (e.g. app registered but not INSTALLED on this repo → 404)
+        # must NOT kill the run — "Resolve auth token" falls back to GITHUB_TOKEN.
+        continue-on-error: true
         uses: actions/create-github-app-token@v1
         with:
           app-id: ${{ secrets.ADLC_APP_ID }}
@@ -70,6 +73,7 @@ jobs:
         # its own single-context expression — a steps+secrets mix in one ${{ }} is a
         # startup_failure actionlint won't catch. See agent-issue.yml.
         env:
+          PRESENT: ${{ steps.appdetect.outputs.present }}
           APP_TOKEN: ${{ steps.apptoken.outputs.token }}
           DEFAULT_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -77,6 +81,9 @@ jobs:
             printf 'GH_TOKEN=%s\n' "$APP_TOKEN" >> "$GITHUB_ENV"
             echo "adlc: using GitHub App token"
           else
+            if [ "$PRESENT" = "true" ]; then
+              echo "::warning::adlc: App secrets are set but token minting failed — is the app INSTALLED on this repo? Falling back to GITHUB_TOKEN."
+            fi
             printf 'GH_TOKEN=%s\n' "$DEFAULT_TOKEN" >> "$GITHUB_ENV"
             echo "adlc: using GITHUB_TOKEN (github-actions[bot])"
           fi

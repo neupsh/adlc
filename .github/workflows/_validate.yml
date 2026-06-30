@@ -1,0 +1,26 @@
+name: _validate (throwaway — delete before merge)
+on:
+  push:
+    branches: [fix/mint-graceful-fallback]
+jobs:
+  v-issue:
+    permissions: { contents: write, issues: write, pull-requests: write }
+    uses: ./.github/workflows/agent-issue.yml
+    with:
+      issue_number: "0"
+      issue_title: "validate"
+      runner_labels: '["self-hosted","__adlc_validate_no_runner__"]'
+      review_rounds: "0"
+    secrets: inherit
+  v-revise:
+    permissions: { contents: write, issues: write, pull-requests: write }
+    uses: ./.github/workflows/agent-revise.yml
+    with:
+      pr_number: "0"
+      runner_labels: '["self-hosted","__adlc_validate_no_runner__"]'
+    secrets: inherit
+  v-automerge:
+    permissions: { contents: write, pull-requests: write }
+    uses: ./.github/workflows/agent-automerge.yml
+    with: { pr_number: "0" }
+    secrets: inherit
