@@ -4,6 +4,8 @@
 # changes, the coder agent addresses them and pushes; then the reviewer looks again.
 # On approval, if the issue carries the auto-merge label, the PR is squash-merged —
 # otherwise it's left for a human. If the loop never converges, it stops for a human.
+# If a human merges/closes the PR mid-review, the loop stops without posting an
+# approval/merge/no-converge verdict (the verdict would be misleading — see #97).
 #
 # A GITHUB_TOKEN-authored review/push never triggers another workflow, which is why
 # this runs inline (one job) instead of as event-chained workflows.
@@ -36,8 +38,25 @@ PROMPT_FILE="$RUNNER_TEMP/agent-prompt.txt"
 export PROMPT_FILE
 approved=false
 
+# A human can merge or close the PR while this loop runs — the reviewer call alone
+# takes minutes (iteratrade #97: merged during round 1, verdict posted ~3 min later).
+# Posting any verdict — worst of all "leaving this for human approval" — on a PR
+# that's already settled is misleading. Re-check at each step and bail the moment
+# it's confirmed MERGED/CLOSED. Fail OPEN: a transient gh error (empty/unknown
+# state) is NOT treated as settled, so a network blip never skips a real review.
+exit_if_pr_settled() {
+  local state
+  state=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json state -q .state 2>/dev/null || echo "")
+  case "$state" in
+    MERGED|CLOSED)
+      echo "review-loop: PR #$PR_NUMBER is now $state (settled by a human mid-review) — stopping without a verdict."
+      exit 0 ;;
+  esac
+}
+
 for r in $(seq 1 "$ROUNDS"); do
   echo "== AI review round $r/$ROUNDS =="
+  exit_if_pr_settled   # a merge/close during the previous round ends the loop before we spend another reviewer call
   rm -f "$REVIEW_FILE"
 
   # 1) Reviewer writes its verdict to $REVIEW_FILE (does not touch code).
@@ -61,6 +80,10 @@ for r in $(seq 1 "$ROUNDS"); do
     gh pr comment "$PR_NUMBER" --repo "$REPO" --body-file "$CFILE" || true
   fi
 
+  # If the human merged during the reviewer call, the findings above are preserved
+  # as a record, but skip the coder round and the outcome verdict below.
+  exit_if_pr_settled
+
   # Approve only on an explicit APPROVE. Anything else (request changes, or an
   # unparseable/missing verdict) is treated as "needs work" — fail safe.
   if printf '%s' "$verdict" | grep -qiE 'VERDICT:[[:space:]]*APPROVE'; then
@@ -80,6 +103,11 @@ for r in $(seq 1 "$ROUNDS"); do
   claude -p "$(cat "$PROMPT_FILE")" --model "$MODEL" --effort "$EFFORT" \
     --dangerously-skip-permissions 2>&1 | tee "$RUN_LOG" || true
 done
+
+# A human may have merged during the final round's reviewer pass or a coder push.
+# This is the load-bearing guard: it kills the misleading "leaving this for human
+# approval" / "did not converge" comment on a PR that's already settled (#97).
+exit_if_pr_settled
 
 # ── Outcome ───────────────────────────────────────────────────────────────────
 # The auto-merge label may sit on the PR or the originating issue — check both.
