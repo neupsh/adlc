@@ -138,6 +138,21 @@ model. The issue moves `agent-ready` → `agent-coding` → `agent-review` (PR o
 
 ---
 
+## Review loop (you review, the agent fixes)
+
+When you review an agent PR and submit a **"Request changes"** review, the coder agent
+picks up **all** your feedback — the review body, inline comments, and PR conversation
+comments — and revises the PR **in place** (same branch, no new PR). Then you review
+again. Repeat until you **Approve**.
+
+- The trigger is a formal **Request changes** review. A plain PR comment on its own does
+  **not** fire a revise — leave your comments, then submit the review as "Request
+  changes". (Once submitted, the agent reads the conversation comments too.)
+- Each revise round commits (signed) and pushes to the PR branch.
+- With the `auto-merge` label, your **Approve** then merges the PR (see below).
+
+---
+
 ## Auto-merge (opt-in)
 
 By default every PR stops at `agent-review` and waits for a human — that gate is the

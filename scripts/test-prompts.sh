@@ -14,8 +14,12 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BUILD_PROMPT="$SCRIPT_DIR/build-prompt.sh"
-TYPES=(bug story epic initiative)
+TYPES=(bug story epic initiative revise)
 FAILS=0
+
+# revise.sh reads its feedback from $FEEDBACK_FILE.
+FB="$(mktemp)"; printf '### Comment by @reviewer\nUn-scope the .report-meta CSS rule.\n' > "$FB"
+trap 'rm -f "$FB"' EXIT
 
 run_case() {
   local desc="$1" cwd="$2" t pf err code
@@ -30,6 +34,7 @@ run_case() {
       REPO="acme/widget" ISSUE_BODY="Representative body for a $t." \
       BUILD_CHECK="cargo check" BUILD_TEST="cargo test" CONVENTIONS="" \
       AGENT_EMAIL="agent-coder@agents.bot" \
+      PR_NUMBER=83 PR_BRANCH="agent/issue-123" FEEDBACK_FILE="$FB" \
       bash "$BUILD_PROMPT"
     ) >/dev/null 2>"$err" || code=$?
 
