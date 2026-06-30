@@ -11,14 +11,3 @@ jobs:
       runner_labels: '["self-hosted","__adlc_validate_no_runner__"]'
       review_rounds: "0"
     secrets: inherit
-  v-revise:
-    uses: ./.github/workflows/agent-revise.yml
-    with:
-      pr_number: "0"
-      runner_labels: '["self-hosted","__adlc_validate_no_runner__"]'
-    secrets: inherit
-  v-automerge:
-    uses: ./.github/workflows/agent-automerge.yml
-    with:
-      pr_number: "0"
-    secrets: inherit
