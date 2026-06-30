@@ -8,28 +8,12 @@ on:
 jobs:
   p:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      pull-requests: write
-      issues: write
-    env:
-      REPO: ${{ github.repository }}
-      PR: ${{ inputs.pr_number }}
     steps:
-      - name: Detect
-        id: appdetect
-        env:
-          APP_ID: ${{ secrets.ADLC_APP_ID }}
-        run: |
-          if [ -n "$APP_ID" ]; then echo "present=true" >> "$GITHUB_OUTPUT"; else echo "present=false" >> "$GITHUB_OUTPUT"; fi
       - name: Mint
         id: apptoken
-        if: steps.appdetect.outputs.present == 'true'
+        if: ${{ false }}
         uses: actions/create-github-app-token@v1
         with:
           app-id: ${{ secrets.ADLC_APP_ID }}
           private-key: ${{ secrets.ADLC_APP_PRIVATE_KEY }}
-      - name: Use
-        env:
-          GH_TOKEN: ${{ steps.apptoken.outputs.token || secrets.GITHUB_TOKEN }}
-        run: echo "ok len=${#GH_TOKEN}"
+      - run: echo "reached body"
