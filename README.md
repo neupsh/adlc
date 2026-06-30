@@ -163,6 +163,12 @@ until you **Approve**.
 - Each revise round commits (signed) and pushes to the PR branch.
 - With the `auto-merge` label, your **Approve** then merges the PR (see below).
 
+**On-demand AI review.** Comment **`/review`** on any PR (collaborators only) and the AI
+reviewer runs the same review→fix loop on it *now* — useful for PRs that predate the
+issue run, or to re-trigger a review after changes. It's the subscription-priced,
+loop-driving equivalent of `@claude review` (the official Code Review is advisory-only
+and API-billed).
+
 ---
 
 ## Auto-merge (opt-in)

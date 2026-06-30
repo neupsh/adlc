@@ -1,8 +1,11 @@
 name: Agent Revise (Reusable)
 
-# Called by a project's agent-dispatch.yml when a human submits a "Request changes"
-# review. The coder agent reads ALL of the human's feedback and revises the PR in
-# place (same branch, no new PR). The human re-reviews; repeat until they approve.
+# Called by a project's agent-dispatch.yml for two on-demand modes on an existing PR:
+#   mode=revise (default): a "Request changes" review or a '/fix' comment -> the coder
+#     reads ALL feedback and revises the PR in place (same branch, no new PR).
+#   mode=review: a '/review' comment -> runs the inline AI review->fix loop on the PR
+#     (reviewer judges the diff, coder fixes, repeat; merges if the auto-merge label is
+#     present). This is the on-demand twin of the review loop baked into agent-issue.yml.
 
 on:
   workflow_call:
@@ -10,6 +13,21 @@ on:
       pr_number:
         required: true
         type: string
+      mode:
+        description: "revise (apply feedback) or review (run the AI review->fix loop)"
+        required: false
+        type: string
+        default: "revise"
+      review_rounds:
+        description: Max AI review->fix rounds when mode=review
+        required: false
+        type: string
+        default: "3"
+      reviewer_model:
+        description: Claude model for the AI reviewer when mode=review
+        required: false
+        type: string
+        default: "claude-opus-4-8"
       runner_labels:
         description: JSON array of runner labels
         required: false
@@ -48,6 +66,7 @@ jobs:
       PR_NUMBER: ${{ inputs.pr_number }}
       REPO: ${{ github.repository }}
       MODEL: ${{ inputs.model }}
+      MODE: ${{ inputs.mode }}
 
     steps:
       - name: Resolve per-runner temp paths
@@ -138,14 +157,20 @@ jobs:
           git branch -D "$PR_BRANCH" 2>/dev/null || true
           git worktree add -B "$PR_BRANCH" "$WORKTREE" "origin/$PR_BRANCH"
 
-      - name: Note revise start
+      - name: Note start
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          if [ "$MODE" = review ]; then
+            MSG="Agent is reviewing this PR (\`$PR_BRANCH\`) — reviewer: \`${{ inputs.reviewer_model }}\`, up to ${{ inputs.review_rounds }} round(s)"
+          else
+            MSG="Agent Coder is addressing review feedback on \`$PR_BRANCH\` — model: \`$MODEL\`"
+          fi
           gh pr comment "$PR_NUMBER" --repo "$REPO" \
-            --body "Agent Coder is addressing review feedback on \`$PR_BRANCH\` — $(date -u '+%Y-%m-%d %H:%M UTC') · model: \`$MODEL\`" || true
+            --body "$MSG — $(date -u '+%Y-%m-%d %H:%M UTC')" || true
 
       - name: Build revise prompt
+        if: ${{ inputs.mode != 'review' }}
         env:
           ISSUE_TYPE: revise
           AGENT_EMAIL: ${{ inputs.agent_email }}
@@ -156,7 +181,8 @@ jobs:
           set -o pipefail
           bash .adlc/scripts/build-prompt.sh 2>&1 | tee "$RUN_LOG"
 
-      - name: Run agent
+      - name: Run agent (revise)
+        if: ${{ inputs.mode != 'review' }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GPG_TTY: /dev/tty
@@ -166,6 +192,22 @@ jobs:
             --model "$MODEL" \
             --dangerously-skip-permissions \
             2>&1 | tee "$RUN_LOG"
+
+      - name: AI review loop (on demand)
+        if: ${{ inputs.mode == 'review' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GPG_TTY: /dev/tty
+          REVIEW_ROUNDS: ${{ inputs.review_rounds }}
+          REVIEWER_MODEL: ${{ inputs.reviewer_model }}
+          AGENT_EMAIL: ${{ inputs.agent_email }}
+          CONVENTIONS: ${{ inputs.project_conventions }}
+          BUILD_CHECK: ${{ inputs.build_check_cmd }}
+          BUILD_TEST: ${{ inputs.build_test_cmd }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          ADLC_DIR: ${{ github.workspace }}/.adlc/scripts
+        working-directory: ${{ env.WORKTREE }}
+        run: bash "$ADLC_DIR/review-loop.sh" 2>&1 | tee -a "$RUN_LOG"
 
       - name: Report failure
         if: failure()

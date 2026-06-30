@@ -93,10 +93,11 @@ jobs:
       # build_test_cmd:  ""
     secrets: inherit
 
-  # A "Request changes" review (or a '/fix' comment from a collaborator) sends the
-  # PR back to the agent to fix, in place.
+  # On an existing PR (collaborators only): a "Request changes" review or a '/fix'
+  # comment -> the agent fixes it in place; a '/review' comment -> the agent runs the
+  # AI review->fix loop on it.
   revise:
-    if: (github.event_name == 'pull_request_review' && github.event.review.state == 'changes_requested') || (github.event_name == 'issue_comment' && github.event.issue.pull_request != null && contains(github.event.comment.body, '/fix') && contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association))
+    if: (github.event_name == 'pull_request_review' && github.event.review.state == 'changes_requested') || (github.event_name == 'issue_comment' && github.event.issue.pull_request != null && (contains(github.event.comment.body, '/fix') || contains(github.event.comment.body, '/review')) && contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association))
     permissions:
       contents: write
       issues: write
@@ -104,6 +105,7 @@ jobs:
     uses: neupsh/adlc/.github/workflows/agent-revise.yml@main
     with:
       pr_number: \${{ github.event.pull_request.number || github.event.issue.number }}
+      mode: \${{ (github.event_name == 'issue_comment' && contains(github.event.comment.body, '/review')) && 'review' || 'revise' }}
       runner_labels: '["self-hosted","linux","${label}"]'
       # build_check_cmd / build_test_cmd: keep in sync with the dispatch job above
     secrets: inherit
