@@ -69,10 +69,10 @@ jobs:
           CLOSES=$(gh pr view "$PR" --repo "$REPO" --json closingIssuesReferences --jq '.closingIssuesReferences[].number' 2>/dev/null || true)
           gh pr merge "$PR" --repo "$REPO" --"$METHOD" --delete-branch
           gh pr comment "$PR" --repo "$REPO" \
-            --body "Auto-merged after approval (opt-in label \`$LABEL\`)." || true
+            --body "**🔀 Auto-merge** merged this PR after approval (opt-in label \`$LABEL\`). <sub>— adlc</sub>" || true
           # GITHUB_TOKEN merges don't trigger GitHub's auto-close — close them ourselves.
           for iss in $CLOSES; do
             echo "closing issue #$iss (resolved by PR #$PR)"
             gh issue close "$iss" --repo "$REPO" --reason completed \
-              --comment "Resolved by merged PR #$PR." || true
+              --comment "**✅ Resolved** by merged PR #$PR. <sub>— adlc</sub>" || true
           done

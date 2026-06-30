@@ -13,7 +13,7 @@ cat >> "$OUT" << EOF
 Issue: #${ISSUE_NUMBER} — ${ISSUE_TITLE}
 
 1. **Diagnose first** — read the relevant code, understand the root cause fully before touching anything
-2. Post a comment on the issue explaining the diagnosis: \`gh issue comment ${ISSUE_NUMBER} --body "Diagnosis: ..." --repo ${REPO}\`
+2. Post a comment on the issue explaining the diagnosis (prefix it with the role tag so it reads clearly under the github-actions bot): \`gh issue comment ${ISSUE_NUMBER} --body "**🛠 Coder** Diagnosis: ..." --repo ${REPO}\`
 3. Implement the **minimal correct fix** — do not refactor beyond what is necessary
 4. Add a regression test that would have caught this bug
 5. Run build check (0 warnings) then tests

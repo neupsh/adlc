@@ -178,12 +178,12 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           if [ "$MODE" = review ]; then
-            MSG="Agent is reviewing this PR (\`$PR_BRANCH\`) — reviewer: \`${{ inputs.reviewer_model }}\` · effort \`${{ inputs.reviewer_effort }}\`, up to ${{ inputs.review_rounds }} round(s)"
+            MSG="**🔍 Reviewer** is reviewing this PR (\`$PR_BRANCH\`) — model \`${{ inputs.reviewer_model }}\` · effort \`${{ inputs.reviewer_effort }}\`, up to ${{ inputs.review_rounds }} round(s)"
           else
-            MSG="Agent Coder is addressing review feedback on \`$PR_BRANCH\` — model: \`$MODEL\` · effort \`${{ inputs.effort }}\`"
+            MSG="**🛠 Coder** is addressing review feedback on \`$PR_BRANCH\` — model \`$MODEL\` · effort \`${{ inputs.effort }}\`"
           fi
           gh pr comment "$PR_NUMBER" --repo "$REPO" \
-            --body "$MSG — $(date -u '+%Y-%m-%d %H:%M UTC')" || true
+            --body "$MSG · $(date -u '+%Y-%m-%d %H:%M UTC') <sub>— adlc</sub>" || true
 
       - name: Build revise prompt
         if: ${{ inputs.mode != 'review' }}
@@ -236,7 +236,7 @@ jobs:
         run: |
           TAIL=$(tail -30 "$RUN_LOG" 2>/dev/null || echo "no log")
           gh pr comment "$PR_NUMBER" --repo "$REPO" \
-            --body "Agent Coder revise run failed -- see logs. Last output: $TAIL" || true
+            --body "**🛠 Coder** revise run failed -- see logs. Last output: $TAIL <sub>— adlc</sub>" || true
 
       - name: Cleanup worktree
         if: always()
