@@ -85,12 +85,20 @@ jobs:
           chmod 700 "$GNUPGHOME"
           echo "allow-loopback-pinentry" > "$GNUPGHOME/gpg-agent.conf"
           echo "$GPG_PRIVATE_KEY" | gpg --batch --import
+          # Deterministic non-interactive signing: git shells out to this wrapper,
+          # which always supplies the passphrase via loopback. So `git commit -S`
+          # never needs a tty or a time-limited agent cache — long agent runs were
+          # going cold mid-commit, leaving the fix staged but unsigned/unpushed.
+          umask 077
+          printf '%s' "$GPG_PASSPHRASE" > "$GNUPGHOME/passphrase"
+          printf '#!/bin/sh\nexec gpg --batch --no-tty --pinentry-mode loopback --passphrase-file "%s/passphrase" "$@"\n' \
+            "$GNUPGHOME" > "$GNUPGHOME/gpg-sign.sh"
+          chmod 700 "$GNUPGHOME/gpg-sign.sh"
           git config commit.gpgsign true
           git config user.signingkey "$GPG_KEY_ID"
-          gpgconf --kill gpg-agent 2>/dev/null || true
-          echo "$GPG_PASSPHRASE" | gpg --batch --yes \
-            --pinentry-mode loopback --passphrase-fd 0 \
-            --sign /dev/null 2>/dev/null || true
+          git config gpg.program "$GNUPGHOME/gpg-sign.sh"
+          # Fail loudly HERE (not mid-agent-run) if signing is misconfigured.
+          echo "adlc signing check" | "$GNUPGHOME/gpg-sign.sh" --clearsign > /dev/null
 
       - name: Resolve PR branch + gather review feedback
         env:
