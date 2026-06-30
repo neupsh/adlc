@@ -14,7 +14,10 @@ cat >> "$OUT" << EOF
 3. Run the build check command (0 warnings) then the test command
 4. Commit: git commit -S -m '<type>(<scope>): <description>'
 5. Push: git push --force-with-lease origin ${BRANCH}  (the branch is yours; a re-run may need to overwrite a prior push)
-6. Open PR against main with: gh pr create --title '...' --body 'Fixes #${ISSUE_NUMBER}. ...'
+6. Open PR against main with: gh pr create --title '...' --body 'Closes #${ISSUE_NUMBER}. ...'
+   - Use 'Closes #${ISSUE_NUMBER}' when this PR fully resolves the issue (the usual case).
+   - If this is only part of a larger issue needing more PRs, write 'Part of
+     #${ISSUE_NUMBER}' instead (no closing keyword) so the issue stays open.
 7. Update issue label: gh issue edit ${ISSUE_NUMBER} --remove-label agent-coding --add-label agent-review
 
 If you hit an ambiguity that blocks you, post a comment on the issue explaining what is unclear, then stop.

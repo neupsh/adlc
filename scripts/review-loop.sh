@@ -99,9 +99,18 @@ has_label() {
 if $approved; then
   if has_label; then
     echo "review-loop: AI approved + '$LABEL' label → merging PR #$PR_NUMBER (--$METHOD)."
+    # Issues this PR is set to close (from Closes/Fixes/Resolves keywords). A
+    # 'Part of #N' reference is deliberately NOT here, so multi-PR issues stay open.
+    CLOSES=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json closingIssuesReferences --jq '.closingIssuesReferences[].number' 2>/dev/null || true)
     if gh pr merge "$PR_NUMBER" --repo "$REPO" --"$METHOD" --delete-branch; then
       gh pr comment "$PR_NUMBER" --repo "$REPO" \
         --body "AI review approved and auto-merged (opt-in label \`$LABEL\`)." || true
+      # GITHUB_TOKEN merges don't trigger GitHub's auto-close — close them ourselves.
+      for iss in $CLOSES; do
+        echo "review-loop: closing issue #$iss (resolved by PR #$PR_NUMBER)"
+        gh issue close "$iss" --repo "$REPO" --reason completed \
+          --comment "Resolved by merged PR #$PR_NUMBER." || true
+      done
     else
       gh pr comment "$PR_NUMBER" --repo "$REPO" \
         --body "AI review approved but the merge failed — needs a human." || true
