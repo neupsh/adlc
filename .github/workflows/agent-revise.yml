@@ -271,6 +271,8 @@ jobs:
           BUILD_TEST: ${{ inputs.build_test_cmd }}
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
           ADLC_DIR: ${{ github.workspace }}/.adlc/scripts
+          # github-actions[bot] identity for a REAL approval + commit status (see agent-issue.yml).
+          DEFAULT_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         working-directory: ${{ env.WORKTREE }}
         run: bash "$ADLC_DIR/review-loop.sh" 2>&1 | tee -a "$RUN_LOG"
 

@@ -84,6 +84,7 @@ jobs:
       contents: write
       issues: write
       pull-requests: write
+      statuses: write   # lets the AI reviewer post the adlc/ai-review commit status
     uses: neupsh/adlc/.github/workflows/agent-issue.yml@main
     with:
       issue_number: \${{ github.event.issue.number }}
@@ -102,6 +103,7 @@ jobs:
       contents: write
       issues: write
       pull-requests: write
+      statuses: write   # lets the AI reviewer post the adlc/ai-review commit status
     uses: neupsh/adlc/.github/workflows/agent-revise.yml@main
     with:
       pr_number: \${{ github.event.pull_request.number || github.event.issue.number }}
@@ -285,6 +287,11 @@ echo "    GPG_PASSPHRASE   — GPG key passphrase"
 echo ""
 echo "==> Required GitHub labels (create in $REPO Issues):"
 echo "    agent-ready, agent-coding, agent-review, agent-failed"
+echo "    (the AI reviewer auto-creates agent-approved / agent-changes-requested)"
+echo ""
+echo "==> Existing installs: to get the 'adlc/ai-review' merge-box check, add"
+echo "    'statuses: write' to the dispatch: and revise: jobs' permissions: in"
+echo "    .github/workflows/agent-dispatch.yml (freshly generated files already have it)."
 echo ""
 echo "==> Claude auth (subscription, not API key — run once):"
 echo "    claude auth login"

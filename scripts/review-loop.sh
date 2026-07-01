@@ -38,6 +38,81 @@ PROMPT_FILE="$RUNNER_TEMP/agent-prompt.txt"
 export PROMPT_FILE
 approved=false
 
+# ── Making the review VISIBLE (Reviews tab, merge box, issue) ──────────────────
+# The reviewer already writes a branded PR comment (below). On top of that we (a)
+# submit a formal PR review so it lands in the Reviews tab + sets reviewDecision,
+# (b) post an `adlc/ai-review` commit status for the merge box + Checks tab, and
+# (c) move the originating issue to a terminal label with a back-reference. All of
+# it is best-effort — a missing token or permission is logged and skipped, never
+# fatal (scripts load from adlc @main unpinned and can't be branch-tested).
+#
+# The formal review is submitted by github-actions[bot] (DEFAULT_TOKEN). GitHub
+# forbids approving your OWN PR, so a real APPROVE/REQUEST_CHANGES is only possible
+# when github-actions is NOT the PR author. We decide that WITHOUT hard-coding
+# github-actions' login string (gh reports bot authors as `app/<slug>`, not
+# `<slug>[bot]`, so string-matching is fragile), using two reliable signals:
+#   • GH_TOKEN != DEFAULT_TOKEN  → a GitHub App minted GH_TOKEN, so the PR was authored
+#     by the app[bot] (or a human) — github-actions is always a distinct identity → OK.
+#   • else (no App: GH_TOKEN == DEFAULT_TOKEN == github-actions) → only safe if the PR
+#     is human-authored (a /review on someone's PR); a bot-authored PR here is our own
+#     github-actions PR → self-review → downgrade to a COMMENT (still shows in Reviews).
+DEFAULT_TOKEN="${DEFAULT_TOKEN:-}"
+pr_author_is_bot=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json author -q .author.is_bot 2>/dev/null || echo "")
+can_approve=false
+if [ -n "$DEFAULT_TOKEN" ]; then
+  if [ "$GH_TOKEN" != "$DEFAULT_TOKEN" ]; then
+    can_approve=true
+  elif [ "$pr_author_is_bot" = "false" ]; then
+    can_approve=true
+  fi
+fi
+if $can_approve; then
+  REVIEW_TOKEN="$DEFAULT_TOKEN"; APPROVE_EVENT="APPROVE"; CHANGES_EVENT="REQUEST_CHANGES"
+else
+  REVIEW_TOKEN="$GH_TOKEN"; APPROVE_EVENT="COMMENT"; CHANGES_EVENT="COMMENT"
+fi
+# Commit statuses go through github-actions[bot] (governed by the caller's
+# statuses:write grant) when available, else GH_TOKEN. A 403 (grant absent) is
+# swallowed, so repos that haven't added statuses:write simply don't get the check.
+STATUS_TOKEN="${DEFAULT_TOKEN:-$GH_TOKEN}"
+
+# Create a label if missing (idempotent) so --add-label can't fail on a fresh repo.
+ensure_label() { gh label create "$1" --repo "$REPO" --color "$2" --description "$3" --force >/dev/null 2>&1 || true; }
+
+# Formal PR review → Reviews tab + reviewDecision. $1=event $2=body-file.
+# raw-field (not -F) so the body is always a string, never type-coerced.
+submit_review() {
+  GH_TOKEN="$REVIEW_TOKEN" gh api "repos/$REPO/pulls/$PR_NUMBER/reviews" \
+    -f event="$1" -f body="$(cat "$2")" >/dev/null 2>&1 \
+    || echo "review-loop: formal review ($1) not submitted (self-review or perms) — branded comment still posted."
+}
+
+# adlc/ai-review commit status on the PR head → merge box + Checks tab.
+# $1=state(success|failure) $2=description $3=target_url(may be empty).
+set_status() {
+  local sha
+  sha=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json headRefOid -q .headRefOid 2>/dev/null || echo "")
+  [ -z "$sha" ] && return 0
+  GH_TOKEN="$STATUS_TOKEN" gh api "repos/$REPO/statuses/$sha" \
+    -f state="$1" -f context="adlc/ai-review" -f description="$2" \
+    ${3:+-f target_url="$3"} >/dev/null 2>&1 \
+    || echo "review-loop: commit status not set (needs statuses:write on the caller) — skipping."
+}
+
+# Move the originating ISSUE to a terminal review state + leave a back-reference,
+# so someone viewing the issue (not just the PR) sees the review happened.
+# $1=new-label $2=comment-body.
+reflect_on_issue() {
+  [ -z "${ISSUE_NUMBER:-}" ] && return 0
+  gh issue edit "$ISSUE_NUMBER" --repo "$REPO" --add-label "$1" >/dev/null 2>&1 || true
+  gh issue edit "$ISSUE_NUMBER" --repo "$REPO" --remove-label "agent-review" >/dev/null 2>&1 || true
+  gh issue edit "$ISSUE_NUMBER" --repo "$REPO" --remove-label "agent-coding" >/dev/null 2>&1 || true
+  gh issue comment "$ISSUE_NUMBER" --repo "$REPO" --body "$2" >/dev/null 2>&1 || true
+}
+
+ensure_label "agent-approved" "0e8a16" "AI reviewer approved — awaiting human/auto merge"
+ensure_label "agent-changes-requested" "d93f0b" "AI reviewer requested changes — needs a human"
+
 # A human can merge or close the PR while this loop runs — the reviewer call alone
 # takes minutes (iteratrade #97: merged during round 1, verdict posted ~3 min later).
 # Posting any verdict — worst of all "leaving this for human approval" — on a PR
@@ -71,13 +146,27 @@ for r in $(seq 1 "$ROUNDS"); do
 
   # Surface the reviewer's full findings on the PR (not just the final outcome),
   # so non-blocking nits and rationale are visible without digging in the run log.
+  # Then mirror the verdict as a FORMAL review so it also lands in the Reviews tab.
+  review_comment_url=""
   if [ -s "$REVIEW_FILE" ]; then
     CFILE="$RUNNER_TEMP/review-comment.md"
     { printf '**🔍 Reviewer** — round %s/%s (model `%s` · effort `%s`)\n\n' \
         "$r" "$ROUNDS" "$REVIEWER_MODEL" "$REVIEWER_EFFORT"
       cat "$REVIEW_FILE"
       printf '\n<sub>— adlc</sub>\n'; } > "$CFILE"
-    gh pr comment "$PR_NUMBER" --repo "$REPO" --body-file "$CFILE" || true
+    review_comment_url=$(gh pr comment "$PR_NUMBER" --repo "$REPO" --body-file "$CFILE" 2>/dev/null || echo "")
+
+    if printf '%s' "$verdict" | grep -qiE 'VERDICT:[[:space:]]*APPROVE'; then
+      rev_event="$APPROVE_EVENT"; rev_word="approved"
+    else
+      rev_event="$CHANGES_EVENT"; rev_word="requested changes"
+    fi
+    RFILE="$RUNNER_TEMP/review-body.md"
+    { printf 'AI reviewer %s this PR (round %s/%s · model `%s` · effort `%s`).' \
+        "$rev_word" "$r" "$ROUNDS" "$REVIEWER_MODEL" "$REVIEWER_EFFORT"
+      [ -n "$review_comment_url" ] && printf '\n\nFull findings: %s' "$review_comment_url"
+      printf '\n\n— adlc\n'; } > "$RFILE"
+    submit_review "$rev_event" "$RFILE"
   fi
 
   # If the human merged during the reviewer call, the findings above are preserved
@@ -108,6 +197,14 @@ done
 # This is the load-bearing guard: it kills the misleading "leaving this for human
 # approval" / "did not converge" comment on a PR that's already settled (#97).
 exit_if_pr_settled
+
+# Record the verdict as a commit status (merge box + Checks tab) while the PR head
+# still exists — before any merge below deletes the branch.
+if $approved; then
+  set_status "success" "Approved by AI reviewer (up to $ROUNDS round(s))" ""
+else
+  set_status "failure" "AI reviewer did not converge after $ROUNDS round(s)" ""
+fi
 
 # ── Outcome ───────────────────────────────────────────────────────────────────
 # The auto-merge label may sit on the PR or the originating issue — check both.
@@ -154,8 +251,12 @@ if $approved; then
   else
     gh pr comment "$PR_NUMBER" --repo "$REPO" \
       --body "**🔍 Reviewer** approved. No \`$LABEL\` label, so leaving this for human approval. <sub>— adlc</sub>" || true
+    reflect_on_issue "agent-approved" \
+      "**🔍 Reviewer** approved PR #$PR_NUMBER — awaiting human merge (no \`$LABEL\` label). <sub>— adlc</sub>"
   fi
 else
   gh pr comment "$PR_NUMBER" --repo "$REPO" \
     --body "**🔍 Reviewer** did not converge after $ROUNDS round(s) — handing off to a human reviewer. <sub>— adlc</sub>" || true
+  reflect_on_issue "agent-changes-requested" \
+    "**🔍 Reviewer** could not converge on PR #$PR_NUMBER after $ROUNDS round(s) — needs a human. <sub>— adlc</sub>"
 fi

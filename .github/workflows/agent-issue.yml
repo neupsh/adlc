@@ -2,6 +2,9 @@ name: Agent Issue (Reusable)
 
 # Called by each project's agent-dispatch.yml on: issues: labeled.
 # The caller must set permissions: contents/issues/pull-requests: write.
+# Recommended (optional): statuses: write — lets the inline AI reviewer post the
+# adlc/ai-review commit status (merge box + Checks tab). Absent it, the status is
+# skipped; the formal review + issue label transition still work.
 
 on:
   workflow_call:
@@ -321,6 +324,10 @@ jobs:
           BUILD_TEST: ${{ inputs.build_test_cmd }}
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
           ADLC_DIR: ${{ github.workspace }}/.adlc/scripts
+          # github-actions[bot] identity for a REAL approval + the commit status.
+          # review-loop picks APPROVE vs COMMENT by comparing the PR author to this
+          # identity at runtime, so no App-state hint is needed here.
+          DEFAULT_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         working-directory: ${{ env.WORKTREE }}
         run: bash "$ADLC_DIR/review-loop.sh" 2>&1 | tee -a "$RUN_LOG"
 
@@ -334,9 +341,17 @@ jobs:
           CURRENT_LABELS=$(gh issue view "$ISSUE_NUMBER" --json labels \
             -q '[.labels[].name] | join(",")' --repo "$REPO" 2>/dev/null || echo "")
           if [ -n "$PR_URL" ]; then
-            gh issue edit "$ISSUE_NUMBER" \
-              --remove-label "agent-coding" --add-label "agent-review" \
-              --repo "$REPO" 2>/dev/null || true
+            # The inline review loop may have already moved the issue to a terminal
+            # review state (agent-approved / agent-changes-requested). Don't clobber
+            # that back to "agent-review" — only relabel when it's still agent-coding.
+            if echo "$CURRENT_LABELS" | grep -qE '(^|,)(agent-approved|agent-changes-requested)(,|$)'; then
+              gh issue edit "$ISSUE_NUMBER" \
+                --remove-label "agent-coding" --repo "$REPO" 2>/dev/null || true
+            else
+              gh issue edit "$ISSUE_NUMBER" \
+                --remove-label "agent-coding" --add-label "agent-review" \
+                --repo "$REPO" 2>/dev/null || true
+            fi
             gh issue comment "$ISSUE_NUMBER" \
               --body "**🛠 Coder** finished · model \`$MODEL\` — PR: $PR_URL <sub>— adlc</sub>" \
               --repo "$REPO"
